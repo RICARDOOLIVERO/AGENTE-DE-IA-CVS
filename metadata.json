@@ -1,0 +1,6 @@
+{
+  "name": "TalentAI - Headhunter & Analizador de CV",
+  "description": "Agente cazatalentos especializado en análisis de CVs y recomendación automatizada de ofertas de empleo para ingenieros informáticos y especialistas en IA.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
