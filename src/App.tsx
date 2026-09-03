@@ -16,6 +16,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [lastPayload, setLastPayload] = useState<any>(null);
 
   // Filter and Sort states
   const [searchTerm, setSearchTerm] = useState('');
@@ -46,6 +47,7 @@ export default function App() {
       modality: string;
     };
   }) => {
+    setLastPayload(payload);
     setIsLoading(true);
     setErrorMsg(null);
     setLoadingStep(0);
@@ -71,7 +73,16 @@ export default function App() {
       setAnalysisResult(data);
     } catch (err: any) {
       console.error('Analysis error:', err);
-      setErrorMsg(err.message || 'Ocurrió un error al analizar el CV. Verifica la conexión o intenta con otro archivo.');
+      let message = err.message || 'Ocurrió un error al analizar el CV.';
+      if (
+        message.includes('503') ||
+        message.includes('high demand') ||
+        message.includes('UNAVAILABLE') ||
+        message.includes('429')
+      ) {
+        message = 'El servicio de IA experimenta alta demanda momentánea. Por favor, pulsa en "Reintentar" para procesar tu CV.';
+      }
+      setErrorMsg(message);
     } finally {
       clearInterval(stepInterval);
       setIsLoading(false);
@@ -129,17 +140,29 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         {/* Error Alert */}
         {errorMsg && (
-          <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs sm:text-sm flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
+          <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs sm:text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+            <div className="flex items-center gap-2.5">
               <AlertCircle className="w-5 h-5 shrink-0 text-red-400" />
               <span>{errorMsg}</span>
             </div>
-            <button
-              onClick={() => setErrorMsg(null)}
-              className="px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-200 text-xs font-semibold"
-            >
-              Cerrar
-            </button>
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              {lastPayload && (
+                <button
+                  onClick={() => handleAnalyze(lastPayload)}
+                  disabled={isLoading}
+                  className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Reintentar
+                </button>
+              )}
+              <button
+                onClick={() => setErrorMsg(null)}
+                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         )}
 
@@ -318,7 +341,7 @@ export default function App() {
       <footer className="border-t border-slate-800/80 bg-slate-950 py-6 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>TalentAI • Headhunter Automatizado para Ingeniería Informática & IA</span>
-          <span>Impulsado por Google Gemini 3.7 Flash</span>
+          <span>Impulsado por Google Gemini 3.8 Flash</span>
         </div>
       </footer>
     </div>

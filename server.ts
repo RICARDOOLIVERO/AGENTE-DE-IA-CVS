@@ -6,6 +6,61 @@ import { createServer as createViteServer } from "vite";
 
 dotenv.config();
 
+const FALLBACK_MODELS = [
+  "gemini-3.8-flash",
+  "gemini-flash-latest",
+  "gemini-3.1-flash-lite",
+];
+
+async function generateWithFallback(
+  ai: GoogleGenAI,
+  requestParams: {
+    contents: any;
+    config?: any;
+  }
+) {
+  let lastError: any = null;
+
+  for (const model of FALLBACK_MODELS) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        console.log(`[Gemini API] Requesting model: ${model} (attempt ${attempt}/2)`);
+        const response = await ai.models.generateContent({
+          model,
+          contents: requestParams.contents,
+          config: requestParams.config,
+        });
+
+        if (response && response.text) {
+          console.log(`[Gemini API] Success with model: ${model}`);
+          return response;
+        }
+      } catch (err: any) {
+        lastError = err;
+        const errMessage = String(err?.message || err);
+        console.warn(`[Gemini API] Warning on ${model} (attempt ${attempt}): ${errMessage}`);
+
+        const isTransient =
+          errMessage.includes("503") ||
+          errMessage.includes("high demand") ||
+          errMessage.includes("UNAVAILABLE") ||
+          errMessage.includes("429") ||
+          errMessage.includes("RESOURCE_EXHAUSTED");
+
+        if (isTransient && attempt === 1) {
+          // Wait 1.5 seconds before retrying same model or moving to next
+          await new Promise((res) => setTimeout(res, 1500));
+          continue;
+        }
+        // If second attempt failed or non-retryable error on this model, try next model in fallback list
+        break;
+      }
+    }
+  }
+
+  throw lastError || new Error("No se pudo obtener respuesta de los modelos de IA disponibles.");
+}
+
 function getGenAI(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -94,8 +149,7 @@ ${cvText ? `\n--- CONTENIDO DEL CV ---\n${cvText}\n--- FIN DEL CV ---` : ""}
 
       contentsPayload.push({ text: userInstruction });
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.7-flash",
+      const response = await generateWithFallback(ai, {
         contents: contentsPayload,
         config: {
           systemInstruction: systemPrompt,
@@ -278,8 +332,18 @@ ${cvText ? `\n--- CONTENIDO DEL CV ---\n${cvText}\n--- FIN DEL CV ---` : ""}
       res.json(parsedData);
     } catch (error: any) {
       console.error("Error analyzing CV:", error);
+      let userMessage = error?.message || "Ocurrió un error al procesar el CV.";
+      if (
+        typeof userMessage === "string" &&
+        (userMessage.includes("503") ||
+          userMessage.includes("high demand") ||
+          userMessage.includes("UNAVAILABLE") ||
+          userMessage.includes("429"))
+      ) {
+        userMessage = "El servicio de IA experimenta alta demanda puntual. Por favor, reintenta en unos instantes.";
+      }
       res.status(500).json({
-        error: error?.message || "Ocurrió un error al procesar el CV con Gemini.",
+        error: userMessage,
       });
     }
   });
@@ -314,8 +378,7 @@ Genera un JSON con:
 2. "linkedinMessage": Mensaje conciso de máximo 280 caracteres para conectar con el Headhunter/Engineering Lead en LinkedIn.
 3. "keySellingPoints": 3 viñetas destacando por qué este candidato es la mejor contratación para este rol en concreto.`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.7-flash",
+      const response = await generateWithFallback(ai, {
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -335,7 +398,17 @@ Genera un JSON con:
       res.json(parsed);
     } catch (error: any) {
       console.error("Error generating letter:", error);
-      res.status(500).json({ error: error.message || "Error al generar la carta." });
+      let userMessage = error?.message || "Error al generar la carta.";
+      if (
+        typeof userMessage === "string" &&
+        (userMessage.includes("503") ||
+          userMessage.includes("high demand") ||
+          userMessage.includes("UNAVAILABLE") ||
+          userMessage.includes("429"))
+      ) {
+        userMessage = "El servicio de IA experimenta alta demanda puntual. Por favor, reintenta en unos instantes.";
+      }
+      res.status(500).json({ error: userMessage });
     }
   });
 

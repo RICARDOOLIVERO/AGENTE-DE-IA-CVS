@@ -34,7 +34,7 @@ export const Header: React.FC<HeaderProps> = ({ onReset, hasResults }) => {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            Motor Gemini 3.7 Flash Activo
+            Motor Gemini 3.8 Flash Activo
           </div>
 
           {hasResults && onReset && (
