@@ -7,9 +7,9 @@ import { createServer as createViteServer } from "vite";
 dotenv.config();
 
 const FALLBACK_MODELS = [
-  "gemini-3.8-flash",
-  "gemini-flash-latest",
   "gemini-3.1-flash-lite",
+  "gemini-3.6-flash",
+  "gemini-3.8-flash",
 ];
 
 async function generateWithFallback(
@@ -22,42 +22,41 @@ async function generateWithFallback(
   let lastError: any = null;
 
   for (const model of FALLBACK_MODELS) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        console.log(`[Gemini API] Requesting model: ${model} (attempt ${attempt}/2)`);
-        const response = await ai.models.generateContent({
-          model,
-          contents: requestParams.contents,
-          config: requestParams.config,
-        });
+    try {
+      console.log(`[Gemini API] Requesting model: ${model}`);
+      const response = await ai.models.generateContent({
+        model,
+        contents: requestParams.contents,
+        config: requestParams.config,
+      });
 
-        if (response && response.text) {
-          console.log(`[Gemini API] Success with model: ${model}`);
-          return response;
-        }
-      } catch (err: any) {
-        lastError = err;
-        const errMessage = String(err?.message || err);
-        console.warn(`[Gemini API] Warning on ${model} (attempt ${attempt}): ${errMessage}`);
-
-        const isTransient =
-          errMessage.includes("503") ||
-          errMessage.includes("high demand") ||
-          errMessage.includes("UNAVAILABLE") ||
-          errMessage.includes("429") ||
-          errMessage.includes("RESOURCE_EXHAUSTED");
-
-        if (isTransient && attempt === 1) {
-          // Wait 1.5 seconds before retrying same model or moving to next
-          await new Promise((res) => setTimeout(res, 1500));
-          continue;
-        }
-        // If second attempt failed or non-retryable error on this model, try next model in fallback list
-        break;
+      if (response && response.text) {
+        console.log(`[Gemini API] Success with model: ${model}`);
+        return response;
       }
+    } catch (err: any) {
+      lastError = err;
+      const errMessage = String(err?.message || err);
+      console.log(`[Gemini API] Model ${model} unavailable: ${errMessage.slice(0, 120)}...`);
+
+      const isHighDemandOrUnavailable =
+        errMessage.includes("503") ||
+        errMessage.includes("high demand") ||
+        errMessage.includes("UNAVAILABLE") ||
+        errMessage.includes("429") ||
+        errMessage.includes("RESOURCE_EXHAUSTED");
+
+      // For congestion or high-demand, immediately try the next model without delay
+      if (isHighDemandOrUnavailable) {
+        continue;
+      }
+
+      // If network error, brief pause before next model
+      await new Promise((res) => setTimeout(res, 500));
     }
   }
 
+  console.error("[Gemini API] All fallback models failed:", lastError?.message || lastError);
   throw lastError || new Error("No se pudo obtener respuesta de los modelos de IA disponibles.");
 }
 
